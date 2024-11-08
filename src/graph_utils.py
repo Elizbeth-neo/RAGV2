@@ -77,15 +77,22 @@ class RAGGraph:
                     documents.append(doc)
             else:
                 tool_message_content = messages[-1].content
-                parsed_content = json.loads(tool_message_content)
-                documents = [Document(page_content=item["content"], metadata={"source": item["url"]}) for item in parsed_content]
+                try:
+                    parsed_content = json.loads(tool_message_content)
+                    documents = [Document(page_content=item["content"], metadata={"source": item["url"]}) for item in parsed_content]
+                except Exception as e:
+                    print(e)
+
 
             filtered_docs = []
             for d in documents:
-                score = self.retrieval_grader.invoke(
-                    {"question": question, "document": d.page_content}
-                )
-                grade = score.binary_score
+                try:
+                    score = self.retrieval_grader.invoke(
+                        {"question": question, "document": d.page_content}
+                    )
+                    grade = score.binary_score
+                except Exception as e:
+                    return(e)
                 if grade == "yes":
                     print("---GRADE: DOCUMENT RELEVANT---")
                     filtered_docs.append(d)
@@ -107,12 +114,15 @@ class RAGGraph:
             generation_id += 1
 
             # RAG generation
-            generation = self.rag_chain.invoke({"context": documents, "question": question})
+            try:
+                generation = self.rag_chain.invoke({"context": documents, "question": question})
+            except Exception as e:
+                return(e)
 
             chat_history.append([{
-                "generation_id" : generation_id,
-                "user_question" : question,
-                "ai_answer" : generation
+                "generation_id": generation_id,
+                "user_question": question,
+                "ai_answer": generation
             }])
             return {"documents": documents, "question": question,
                     "generation": generation, "generation_id": generation_id,
@@ -135,10 +145,12 @@ class RAGGraph:
                 docs_splitted = documents
             else:
                 docs_splitted = [d.page_content for d in documents]
-
-            score = self.hallucination_grader.invoke(
-                {"documents": docs_splitted, "generation": generation}
-            )
+            try:
+                score = self.hallucination_grader.invoke(
+                    {"documents": docs_splitted, "generation": generation}
+                )
+            except Exception as e:
+                return(e)
 
             # Check hallucinations
             if score:
@@ -147,7 +159,10 @@ class RAGGraph:
                     print("---DECISION: GENERATION IS GROUNDED IN DOCUMENTS---")
                     # Check question-answering
                     print("---GRADE GENERATION vs QUESTION---")
-                    score = self.answer_grader.invoke({"question": question, "generation": generation})
+                    try:
+                        score = self.answer_grader.invoke({"question": question, "generation": generation})
+                    except Exception as e:
+                        return(e)
                     if score:
                         grade = score.binary_score
                         if grade == "yes":
@@ -205,7 +220,10 @@ class RAGGraph:
             documents = state["documents"]
 
             # Re-write question
-            better_question = self.question_rewriter.invoke({"question": question})
+            try:
+                better_question = self.question_rewriter.invoke({"question": question})
+            except Exception as e:
+                return(e)
             print(f'-question-: {question}')
             print(f'\n')
             print(f'-transformed question-: {better_question}')
@@ -224,7 +242,10 @@ class RAGGraph:
             docs_grade_id = state.get("docs_grade_id", 0)
 
             model = self.llm.bind_tools(self.tools)
-            response = model.invoke(question)
+            try:
+                response = model.invoke(question)
+            except Exception as e:
+                return(e)
             messages.append(response)
 
             tool_name = response.additional_kwargs.get('tool_calls')[0]['function']['name']
